@@ -2,6 +2,8 @@ FROM golang:1.18 as builder
 ENV GOPROXY=https://goproxy.io,direct
 WORKDIR /go/src/app
 COPY . .
+ENV GOPROXY=direct 
+ENV GOSUMDB=off
 RUN go get .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o app .
 

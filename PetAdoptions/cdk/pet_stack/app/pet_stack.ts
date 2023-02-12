@@ -13,13 +13,13 @@ const app = new App();
 const stack = new Services(app, stackName, { 
   env: { 
     account: process.env.CDK_DEFAULT_ACCOUNT, 
-    region: process.env.CDK_DEFAULT_REGION 
+    region: 'ap-southeast-2'
 }});
 
 const applications = new Applications(app, "Applications", {
   env: { 
     account: process.env.CDK_DEFAULT_ACCOUNT, 
-    region: process.env.CDK_DEFAULT_REGION 
+    region: 'ap-southeast-2'
 }});
 
 Tags.of(app).add("Workshop","true")

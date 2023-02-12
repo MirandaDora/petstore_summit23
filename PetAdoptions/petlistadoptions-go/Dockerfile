@@ -1,6 +1,8 @@
 FROM golang:1.15 as builder
 WORKDIR /go/src/app
 COPY . .
+ENV GOPROXY=https://goproxy.io,direct
+ENV GOSUMDB=off
 RUN go get .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o app .
 

@@ -18,11 +18,8 @@ import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as ecrassets from 'aws-cdk-lib/aws-ecr-assets';
 
 import { Construct } from 'constructs'
-import { PayForAdoptionService } from './services/pay-for-adoption-service'
 import { ListAdoptionsService } from './services/list-adoptions-service'
 import { SearchService } from './services/search-service'
-import { TrafficGeneratorService } from './services/traffic-generator-service'
-import { StatusUpdaterService } from './services/status-updater-service'
 import { PetAdoptionsStepFn } from './services/stepfn'
 import { KubernetesVersion } from 'aws-cdk-lib/aws-eks';
 import { CfnJson, RemovalPolicy, Fn, Duration, Stack, StackProps, CfnOutput } from 'aws-cdk-lib';
@@ -161,8 +158,6 @@ export class Services extends Stack {
             resources: ['*']
         });
 
-        const repositoryURI = "public.ecr.aws/one-observability-workshop";
-
         const stack = Stack.of(this);
         const region = stack.region;
 
@@ -171,27 +166,6 @@ export class Services extends Stack {
         });
 
         ecsServicesSecurityGroup.addIngressRule(ec2.Peer.ipv4(theVPC.vpcCidrBlock), ec2.Port.tcp(80));
-
-        // PayForAdoption service definitions-----------------------------------------------------------------------
-        const payForAdoptionService = new PayForAdoptionService(this, 'pay-for-adoption-service', {
-            cluster: new ecs.Cluster(this, "PayForAdoption", {
-                vpc: theVPC,
-                containerInsights: true
-            }),
-            logGroupName: "/ecs/PayForAdoption",
-            cpu: 1024,
-            memoryLimitMiB: 2048,
-            healthCheck: '/health/status',
-            // build locally
-            //repositoryURI: repositoryURI,
-            database: auroraCluster,
-            desiredTaskCount : 2,
-            region: region,
-            securityGroup: ecsServicesSecurityGroup
-        });
-        payForAdoptionService.taskDefinition.taskRole?.addToPrincipalPolicy(readSSMParamsPolicy);
-        payForAdoptionService.taskDefinition.taskRole?.addToPrincipalPolicy(ddbSeedPolicy);
-
 
         const ecsPetListAdoptionCluster = new ecs.Cluster(this, "PetListAdoptions", {
             vpc: theVPC,
@@ -232,26 +206,6 @@ export class Services extends Stack {
         })
         searchService.taskDefinition.taskRole?.addToPrincipalPolicy(readSSMParamsPolicy);
 
-        // Traffic Generator task definition.
-        const trafficGeneratorService = new TrafficGeneratorService(this, 'traffic-generator-service', {
-            cluster: ecsPetListAdoptionCluster,
-            logGroupName: "/ecs/PetTrafficGenerator",
-            cpu: 256,
-            memoryLimitMiB: 512,
-            instrumentation: 'none',
-            //repositoryURI: repositoryURI,
-            desiredTaskCount: 1,
-            region: region,
-            securityGroup: ecsServicesSecurityGroup
-        })
-        trafficGeneratorService.taskDefinition.taskRole?.addToPrincipalPolicy(readSSMParamsPolicy);
-
-        //PetStatusUpdater Lambda Function and APIGW--------------------------------------
-        const statusUpdaterService = new StatusUpdaterService(this, 'status-updater-service', {
-            tableName: dynamodb_petadoption.tableName
-        });
-
-
         const albSG = new ec2.SecurityGroup(this,'ALBSecurityGroup',{
             vpc: theVPC,
             securityGroupName: 'ALBSecurityGroup',
@@ -265,7 +219,6 @@ export class Services extends Stack {
             internetFacing: true,
             securityGroup: albSG
         });
-        trafficGeneratorService.node.addDependency(alb);
 
         const targetGroup = new elbv2.ApplicationTargetGroup(this, 'PetSiteTargetGroup', {
             port: 80,
@@ -633,7 +586,7 @@ export class Services extends Stack {
         this.createSsmParameters(new Map(Object.entries({
             '/petstore/rumscript': " ",
             '/petstore/petadoptionsstepfnarn': petAdoptionsStepFn.stepFn.stateMachineArn,
-            '/petstore/updateadoptionstatusurl': statusUpdaterService.api.url,
+            '/petstore/updateadoptionstatusurl': 'http://simplified/updateadoptionstatus',
             '/petstore/queueurl': sqsQueue.queueUrl,
             '/petstore/snsarn': topic_petadoption.topicArn,
             '/petstore/dynamodbtablename': dynamodb_petadoption.tableName,
@@ -641,9 +594,9 @@ export class Services extends Stack {
             '/petstore/searchapiurl': `http://${searchService.service.loadBalancer.loadBalancerDnsName}/api/search?`,
             '/petstore/petlistadoptionsurl': `http://${listAdoptionsService.service.loadBalancer.loadBalancerDnsName}/api/adoptionlist/`,
             '/petstore/petlistadoptionsmetricsurl': `http://${listAdoptionsService.service.loadBalancer.loadBalancerDnsName}/metrics`,
-            '/petstore/paymentapiurl': `http://${payForAdoptionService.service.loadBalancer.loadBalancerDnsName}/api/home/completeadoption`,
-            '/petstore/payforadoptionmetricsurl': `http://${payForAdoptionService.service.loadBalancer.loadBalancerDnsName}/metrics`,
-            '/petstore/cleanupadoptionsurl': `http://${payForAdoptionService.service.loadBalancer.loadBalancerDnsName}/api/home/cleanupadoptions`,
+            '/petstore/paymentapiurl': `http://simplified/api/home/completeadoption`,
+            '/petstore/payforadoptionmetricsurl': `http://simplifed/metrics`,
+            '/petstore/cleanupadoptionsurl': `http://simplifed/api/home/cleanupadoptions`,
             '/petstore/rdssecretarn': `${auroraCluster.secret?.secretArn}`,
             '/petstore/rdsendpoint': auroraCluster.clusterEndpoint.hostname,
             '/petstore/stackname': stackName,
@@ -656,7 +609,7 @@ export class Services extends Stack {
 
         this.createOuputs(new Map(Object.entries({
             'QueueURL': sqsQueue.queueUrl,
-            'UpdateAdoptionStatusurl': statusUpdaterService.api.url,
+            'UpdateAdoptionStatusurl': 'http://simplified/updateadoptionstatus',
             'SNSTopicARN': topic_petadoption.topicArn,
             'RDSServerName': auroraCluster.clusterEndpoint.hostname
         })));
